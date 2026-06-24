@@ -4,7 +4,6 @@
 declare const __SNAPSHOT_ENV_BRIDGE__: {
   treasuryEth: string;
   rpcUrl: string;
-  snapshotBucket: string;
   arweaveDonation: string;
   aktDonation: string;
 };
@@ -16,12 +15,10 @@ interface ImportMetaEnv {
   /** Snapshot / donations (see src/snapshot/README.md) */
   readonly VITE_SNAPSHOT_ETH_WALLET_ADDRESS?: string;
   readonly VITE_SNAPSHOT_RPC?: string;
-  readonly VITE_SNAPSHOT_BUCKET?: string;
-  readonly VITE_SNAPSHOT_BUCKET_URL?: string;
   readonly VITE_SNAPSHOT_BASE_RPC?: string;
   readonly VITE_SNAPSHOT_ARWEAVE_WALLET?: string;
   readonly VITE_SNAPSHOT_AKT_WALLET?: string;
-  readonly VITE_SNAPSHOT_INDEXER_API_URL?: string;
+  readonly VITE_SNAPSHOT_AUTH_WORKER_URL?: string;
   /** Legacy aliases used if VITE_SNAPSHOT_* is unset */
   readonly VITE_ETH_WALLET_ADDRESS?: string;
   readonly VITE_RPC?: string;

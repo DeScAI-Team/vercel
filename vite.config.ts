@@ -21,7 +21,6 @@ export default defineConfig(({ mode }) => {
   const snapshotEnvBridge = {
     treasuryEth: trimEnv(env.ETH_WALLET_ADDRESS),
     rpcUrl: trimEnv(env.RPC),
-    snapshotBucket: trimEnv(env.SNAPSHOT_BUCKET),
     arweaveDonation: trimEnv(env.ARWEAVE_WALLET_ADDRESS),
     aktDonation: trimEnv(env.AKT_WALLET_ADDRESS)
   };
