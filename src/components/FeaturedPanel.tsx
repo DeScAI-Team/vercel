@@ -439,7 +439,7 @@ const FeaturedPanel = ({ featuredTxids, sourceLoading = false, sourceError = nul
         {!loading && !detailedReviews.length && (
           <article className="space-y-4 rounded-[16px] border border-[#263f72] bg-[#1a2247] p-5 text-white/80 shadow-[inset_0_1px_0_rgba(80,126,205,0.12)]">
             <h3 className="text-2xl font-semibold">No featured review yet</h3>
-            <p className="text-white/70">No agent uploads with a composite score were found in the last two weeks.</p>
+            <p className="text-white/70">No agent uploads with a composite score were found.</p>
           </article>
         )}
 

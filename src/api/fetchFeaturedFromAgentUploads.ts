@@ -103,18 +103,24 @@ const readString = (record: ArweaveDocument, keys: string[]): string | null => {
 const publishedTime = (iso: string | null): number =>
   iso && Number.isFinite(new Date(iso).getTime()) ? new Date(iso).getTime() : Number.NEGATIVE_INFINITY;
 
+const recencyTime = (summary: FeaturedUploadSummary): number => {
+  const published = publishedTime(summary.published_at);
+  if (published !== Number.NEGATIVE_INFINITY) return published;
+  return publishedTime(summary.review_date);
+};
+
 const compareFeaturedSummaries = (left: FeaturedUploadSummary, right: FeaturedUploadSummary) => {
+  const recencyDelta = recencyTime(right) - recencyTime(left);
+  if (recencyDelta !== 0) {
+    return recencyDelta;
+  }
+
   const scoreDelta = (right.composite_score ?? Number.NEGATIVE_INFINITY) - (left.composite_score ?? Number.NEGATIVE_INFINITY);
   if (scoreDelta !== 0) {
     return scoreDelta;
   }
 
-  const nullDelta = left.null_category_count - right.null_category_count;
-  if (nullDelta !== 0) {
-    return nullDelta;
-  }
-
-  return publishedTime(right.published_at) - publishedTime(left.published_at);
+  return left.null_category_count - right.null_category_count;
 };
 
 const readPlatformFromTags = (tags: ArweaveTag[]): string | null => {
@@ -298,9 +304,9 @@ export function getCachedFeaturedTxids(): string[] {
 }
 
 /**
- * Scores recent agent reviews per platform and returns six carousel txids:
- * top two composite_score reviews each for Molecule, PumpScience, and ResearchHub.
- * Picks favor highest composite_score, then fewest null category scores.
+ * Returns six carousel txids from agent reviews with a composite score:
+ * the two most recent reviews each for Molecule, PumpScience, and ResearchHub.
+ * Ties break on composite_score, then fewest null category scores.
  */
 export async function fetchFeaturedFromAgentUploads(
   forceRefresh = false,
