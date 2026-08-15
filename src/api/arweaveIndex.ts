@@ -108,7 +108,11 @@ const loadLocalEnv = () => {
 loadLocalEnv();
 
 const app = express();
-const PORT = 3001; // Run on port 3001 to avoid conflicts main web app!
+const PORT = Number(runtimeProcess.process?.env?.PORT) || 3001; // 3001 locally to avoid the Vite app
+const argv = (runtimeProcess.process as { argv?: string[] } | undefined)?.argv ?? [];
+const isIndexBuild = argv.includes("--build");
+const isVercel = Boolean(runtimeProcess.process?.env?.VERCEL);
+const INDEX_SNAPSHOT_PATH = path.resolve(runtimeProcess.process?.cwd?.() ?? ".", "data", "arweave-index.json");
 const MOLECULE_GRAPHQL_ENDPOINT =
   runtimeProcess.process?.env?.MOLECULE_GRAPHQL_ENDPOINT ?? "https://production.graphql.api.molecule.xyz/graphql";
 const MOLECULE_API_KEY = runtimeProcess.process?.env?.MOLECULE_API_KEY;
@@ -491,24 +495,60 @@ const fetchTransactionsForTagFilters = async (tagFilters: IndexTagFilter[]) => {
   return transactions;
 };
 
+const collectIndexTransactions = async (): Promise<ArweaveTransaction[]> => {
+  const batches = await Promise.all(INDEX_TAG_FILTER_SETS.map((tagFilters) => fetchTransactionsForTagFilters([...tagFilters])));
+
+  const byTxid = new Map<string, ArweaveTransaction>();
+  for (const batch of batches) {
+    for (const transaction of batch) {
+      byTxid.set(transaction.txid, transaction);
+    }
+  }
+
+  return [...byTxid.values()].sort((a, b) => {
+    const timeA = a.timestamp ? new Date(a.timestamp).getTime() : Infinity;
+    const timeB = b.timestamp ? new Date(b.timestamp).getTime() : Infinity;
+    return timeB - timeA;
+  });
+};
+
+const readIndexSnapshot = (): ArweaveTransaction[] | null => {
+  if (!fs.existsSync(INDEX_SNAPSHOT_PATH)) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(INDEX_SNAPSHOT_PATH, "utf8")) as unknown;
+    return Array.isArray(parsed) ? (parsed as ArweaveTransaction[]) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeIndexSnapshot = (transactions: ArweaveTransaction[]) => {
+  fs.mkdirSync(path.dirname(INDEX_SNAPSHOT_PATH), { recursive: true });
+  fs.writeFileSync(INDEX_SNAPSHOT_PATH, JSON.stringify(transactions));
+};
+
+if (isIndexBuild) {
+  collectIndexTransactions()
+    .then((transactions) => {
+      writeIndexSnapshot(transactions);
+      console.log(`Index API full build: ${transactions.length} transactions -> ${INDEX_SNAPSHOT_PATH}`);
+      process.exit(0);
+    })
+    .catch((error: unknown) => {
+      console.error(`[ERROR] Index API full build: ${getErrorMessage(error)}`);
+      process.exit(1);
+    });
+}
+
 app.get("/api/index", async (_req: Request, res: Response) => {
   try {
-    const batches = await Promise.all(INDEX_TAG_FILTER_SETS.map((tagFilters) => fetchTransactionsForTagFilters([...tagFilters])));
-
-    const byTxid = new Map<string, ArweaveTransaction>();
-    for (const batch of batches) {
-      for (const transaction of batch) {
-        byTxid.set(transaction.txid, transaction);
-      }
+    const snapshot = readIndexSnapshot();
+    if (snapshot) {
+      res.json(snapshot);
+      return;
     }
 
-    const allTransactions = [...byTxid.values()].sort((a, b) => {
-      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : Infinity;
-      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : Infinity;
-      return timeB - timeA;
-    });
-
-    res.json(allTransactions);
+    res.json(await collectIndexTransactions());
   } catch (error: unknown) {
     console.error(`[ERROR] Arweave Indexer: ${getErrorMessage(error)}`);
 
@@ -584,13 +624,18 @@ app.get("/api/bio/liquid-agents", async (_req: Request, res: Response) => {
   }
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`API server listening: http://localhost:${PORT}/api/index`);
-  console.log(`Arweave index wallets: ${WALLETS.join(", ")}`);
-});
+let server: ReturnType<typeof app.listen> | undefined;
 
 // Endpoint to cleanly exit the API
 app.get("/api/exit", (req: Request, res: Response) => {
+  if (!server) {
+    res.status(503).json({
+      error: "Exit endpoint disabled",
+      message: "No persistent server to shut down."
+    });
+    return;
+  }
+
   if (!ARWEAVE_EXIT_TOKEN) {
     res.status(503).json({
       error: "Exit endpoint disabled",
@@ -614,3 +659,12 @@ app.get("/api/exit", (req: Request, res: Response) => {
     console.log("Arweave Indexer stopped.");
   });
 });
+
+if (!isIndexBuild && !isVercel) {
+  server = app.listen(PORT, () => {
+    console.log(`API server listening: http://localhost:${PORT}/api/index`);
+    console.log(`Arweave index wallets: ${WALLETS.join(", ")}`);
+  });
+}
+
+export default app;
